@@ -1,0 +1,19 @@
+services:
+  canzoniere-api:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./songs.db:/app/songs.db:ro
+      - ./template:/app/template:ro
+    environment:
+      DB_PATH: /app/songs.db
+      TEMPLATE_PATH: /app/template
+      PORT: "8080"
+      # SMTP — configura con le tue credenziali
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+    restart: unless-stopped

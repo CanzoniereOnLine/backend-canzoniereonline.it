@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../.Trash/template"
+		},
+		{
+			"path": "../../canzoniereonline-frontend"
+		},
+		{
+			"path": "../../canzoniere-astro"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "canzoniereonline-frontend"
+	}
+}

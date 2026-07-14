@@ -1,0 +1,29 @@
+%% ccicons.sty — stub minimo per LuaLaTeX
+%% Reimplementa i comandi usati da canzoniereonline.cls senza richiedere
+%% il font ccicons (non disponibile in texlive-plain-generic su Debian).
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{ccicons}[2024/01/01 v1.1 Creative Commons icons stub]
+
+\newcommand{\ccLogo}{(cc)}
+\newcommand{\ccAttrib}{BY}
+\newcommand{\ccNonCommercial}{NC}
+\newcommand{\ccNoDerivatives}{ND}
+\newcommand{\ccShareAlike}{SA}
+\newcommand{\ccZero}{0}
+\newcommand{\ccPublicDomain}{PD}
+
+% Combinazioni standard
+\newcommand{\ccby}{\ccLogo\,\ccAttrib}
+\newcommand{\ccbync}{\ccLogo\,\ccAttrib\,\ccNonCommercial}
+\newcommand{\ccbyncnd}{\ccLogo\,\ccAttrib\,\ccNonCommercial\,\ccNoDerivatives}
+\newcommand{\ccbyncsa}{\ccLogo\,\ccAttrib\,\ccNonCommercial\,\ccShareAlike}
+\newcommand{\ccbynd}{\ccLogo\,\ccAttrib\,\ccNoDerivatives}
+\newcommand{\ccbysa}{\ccLogo\,\ccAttrib\,\ccShareAlike}
+\newcommand{\ccnc}{\ccLogo\,\ccNonCommercial}
+\newcommand{\ccnd}{\ccLogo\,\ccNoDerivatives}
+\newcommand{\ccsa}{\ccLogo\,\ccShareAlike}
+
+% Variante EU usata da canzoniereonline.cls: \ccbyncsaeu
+\newcommand{\ccbyncsaeu}{\ccLogo\,\ccAttrib\,\ccNonCommercial\,\ccShareAlike\,EU}
+
+\endinput

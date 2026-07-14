@@ -1,0 +1,53 @@
+# ── Stage 1: compila il binario Go (statico) ──────────────────────────────────
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache gcc musl-dev
+
+WORKDIR /app
+COPY go.mod go.sum ./
+COPY vendor/ ./vendor/
+COPY main.go .
+
+RUN CGO_ENABLED=1 go build -mod=vendor \
+    -ldflags="-s -w -extldflags '-static'" \
+    -o canzoniere-api .
+
+# ── Stage 2: immagine runtime minimale ───────────────────────────────────────
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # runtime base
+    ca-certificates \
+    perl \
+    fontconfig \
+    # xindy (generazione indici)
+    xindy \
+    # engine LuaLaTeX + fontspec
+    texlive-luatex \
+    # pacchetti LaTeX base: calc, geometry, graphicx, hyperref, url, xkeyval...
+    texlive-latex-base \
+    texlive-latex-recommended \
+    # pacchetti extra: fancyhdr, multirow, xcolor, pdfpages, imakeidx, titlesec,
+    #                  lastpage, microtype, tabularx, booktabs, colortbl,
+    #                  etoolbox, xstring, xparse, amssymb...
+    texlive-fonts-extra\
+    texlive-fonts-recommended \
+    # babel italiano
+    texlive-lang-italian \
+    # pacchetto songs (composizione testi musicali)
+    texlive-music \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN fc-cache -fv
+
+WORKDIR /app
+COPY --from=builder /app/canzoniere-api .
+COPY template/ ./template/
+
+ENV DB_PATH=/app/songs.db
+ENV TEMPLATE_PATH=/app/template
+ENV PORT=8080
+
+EXPOSE 8080
+ENTRYPOINT ["./canzoniere-api"]
