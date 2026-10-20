@@ -1,0 +1,99 @@
+%indicazione per la compilazione:
+% 1. compila con LuaLaTeX
+% 2. compila con LuaLaTeX
+% 3. apri il prompt dei comandi nella cartella di lavoro e dai il comando xindy -M texindy -C utf8 -L italian -M xindystyle alfabetico.idx
+% 3. apri il prompt dei comandi nella cartella di lavoro e dai il comando xindy -M texindy -C utf8 -L italian -M xindystyle autori.idx
+% 3. apri il prompt dei comandi nella cartella di lavoro e dai il comando xindy -M texindy -C utf8 -L italian -M xindystyle tematico.idx
+% 4. compila con LuaLaTeX
+%indice tematico
+%Affinché si possa creare un indice tematico serve che dopo \beginsong si inserisca il comando \momenti{}
+%L'argomento di \momenti{} è la lista dei momenti liturgici in cui la canzone viene usata, separati da punto e virgola
+%ad esempio \momenti{Ingresso;Comunione;Congedo}
+%è possibile usare la definizione che si vuole, anche inserendo spazi
+
+
+\documentclass[##documentclass##]{canzoniereonline}  %DA RIEMPIRE SECONDO SCELTE FATTE SUL SITO
+%opzioni formato: singoli, standard (A4), a5vert, a5oriz, a6vert;
+%opzioni accordi: lyric, chorded {quelli d Songs}
+%opzioni font: palatino, libertine
+%opzioni segno minore: "minorsign=quel che vuoi"
+%opzioni indici: authorsindex, titleindex, tematicindex
+%opzioni copertina: cover e nocover
+\usepackage{fontspec}
+\usepackage[italian]{babel}
+\defaultfontfeatures{Ligatures=TeX}
+
+%\geometry{paperheight=148mm, paperwidth=210mm, inner=8mm, outer=10mm, top=10mm, bottom=10mm}%scrivi qui dimensioni pagine e margini
+
+\usepackage[]{microtype}
+
+\usepackage[bookmarks]{hyperref}
+%righe per la copertina
+\renewcommand{\titolettocop}{##titolocop##}  %DA RIEMPIRE SECONDO SCELTE FATTE SUL SITO
+\renewcommand{\titolocop}{##titolocop##} %DA RIEMPIRE SECONDO SCELTE FATTE SUL SIT
+\renewcommand{\sottotitolocop}{##sottotitolocop##}%DA RIEMPIRE SECONDO SCELTE FATTE SUL SIT
+\renewcommand{\piede}{\today}
+\def\canzsongcolumsnumber{##canzsongcolumsnumber##}%DA RIEMPIRE SECONDO SCELTE FATTE SUL SIT
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+\ifcover
+	\firstpage
+	\colophon
+\else
+	\relax
+\fi
+\begin{songs}{}
+\songcolumns{\canzsongcolumsnumber}
+
+##CANZONI##
+
+\end{songs}
+
+\ifcanzsingole
+	\relax
+\else
+	\iftitleindex
+	\printindex[alfabetico]
+	\fi
+	\ifauthorsindex
+	\printindex[autori]
+	\fi
+	\iftematicindex
+	\printindex[tematico]
+	\fi
+	\ifcover
+		\relax
+	\else
+		\colophon
+	\fi
+\fi
+
+
+
+\end{document}
+\ifcanzsingole
+	\relax
+\else
+	\iftitleindex
+		\ifxetex
+		\printindex[alfabetico]
+		\else
+		\printindex
+		\fi
+	\else
+	\fi
+	\ifauthorsindex
+	\printindex[autori]
+	\else
+	\fi
+	\iftematicindex
+	\printindex[tematico]
+	\else
+	\fi
+	\ifcover
+		\relax
+	\else
+		\colophon
+	\fi
+\fi

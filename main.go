@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"mime"
@@ -52,6 +53,7 @@ type Config struct {
 	DBReleaseURL        string // URL repo GitHub o asset diretto (.db) su GitHub Releases
 	DBUpdateIntervalSec int    // intervallo in secondi tra i check di aggiornamento (default 21600 = 6h)
 	TemplatePath        string
+	MailTemplatePath    string
 	Port                string
 	SMTPHost            string
 	SMTPPort            string
@@ -79,8 +81,9 @@ func loadConfig() Config {
 			}
 			return 21600 // default: 6 ore
 		}(),
-		TemplatePath: getEnv("TEMPLATE_PATH", "template"),
-		Port:         getEnv("PORT", "8080"),
+		TemplatePath:     getEnv("TEMPLATE_PATH", "template"),
+		MailTemplatePath: getEnv("MAIL_TEMPLATE_PATH", "mailtemplates"),
+		Port:             getEnv("PORT", "8080"),
 		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
 		SMTPPort:     getEnv("SMTP_PORT", "587"),
 		SMTPUser:     getEnv("SMTP_USER", ""),
@@ -813,6 +816,34 @@ func scanSong(cfg Config, row *sql.Row) (*Song, error) {
 	return &s, nil
 }
 
+// scanSongs legge righe multiple con tutte le colonne (incluso testo_completo
+// e testo_semplice) e le converte in []Song. Usata da /songs (elenco completo).
+func scanSongs(cfg Config, rows *sql.Rows) ([]Song, error) {
+	var out []Song
+	for rows.Next() {
+		var s Song
+		var autore, album, tonalita, famiglia, gruppo, momenti,
+			dataRev, trasc, testo, testoS sql.NullString
+		if err := rows.Scan(
+			&s.Identificatore, &s.Titolo,
+			&autore, &album, &tonalita, &famiglia, &gruppo, &momenti,
+			&dataRev, &trasc, &testo, &testoS,
+		); err != nil {
+			return nil, err
+		}
+		s.Autore, s.Album, s.Tonalita = nullStr(autore), nullStr(album), nullStr(tonalita)
+		s.Famiglia, s.Gruppo, s.Momenti = nullStr(famiglia), nullStr(gruppo), nullStr(momenti)
+		s.DataRevisione, s.Trascrittore = nullStr(dataRev), nullStr(trasc)
+		s.TestoCompleto, s.TestoSemplice = nullStr(testo), nullStr(testoS)
+		s.PdfAccordiURL, s.PdfTestoURL = songPDFURLs(cfg, s.Identificatore)
+		out = append(out, s)
+	}
+	if out == nil {
+		out = []Song{}
+	}
+	return out, rows.Err()
+}
+
 func scanSummaries(cfg Config, rows *sql.Rows) ([]SongSummary, error) {
 	var out []SongSummary
 	for rows.Next() {
@@ -1077,6 +1108,31 @@ func handleSearch(cfg Config, db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// GET /songs — elenco completo di tutte le canzoni, con Song (non SongSummary):
+// include quindi anche testo_completo e testo_semplice. Nessun parametro.
+func handleAllSongs(cfg Config, db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "solo GET")
+			return
+		}
+		rows, err := db.Query(`SELECT identificatore, titolo, autore, album, tonalita,
+			famiglia, gruppo, momenti, data_revisione, trascrittore,
+			testo_completo, testo_semplice FROM songs ORDER BY titolo COLLATE NOCASE`)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer rows.Close()
+		list, err := scanSongs(cfg, rows)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"count": len(list), "results": list})
+	}
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Canzoniere generation
 // ════════════════════════════════════════════════════════════════════════════
@@ -1098,7 +1154,7 @@ func buildDocumentClass(req *CanzonieRequest) string {
 	}
 	copertina := req.Copertina
 	if copertina == "" {
-		copertina = "cover"
+		copertina = "nocover"
 	}
 	opts := []string{formato, accordi, font}
 	if req.MinorSign != "" {
@@ -1588,6 +1644,59 @@ func generateCanzoniere(cfg Config, db *sql.DB, req *CanzonieRequest, jobID stri
 // Email
 // ════════════════════════════════════════════════════════════════════════════
 
+// MailData raggruppa i "TAG" disponibili nei template HTML delle mail.
+// Nei file .html si usano come {{.Titolo}}, {{.JobID}}, ecc. — html/template
+// esegue l'escaping automatico dei valori, quindi è sicuro anche se Titolo
+// o Email contengono caratteri HTML speciali.
+type MailData struct {
+	JobID   string // identificatore del job di generazione
+	Titolo  string // titolo del canzoniere
+	Email   string // indirizzo del destinatario
+	ZipName string // nome del file zip allegato (vuoto in caso di errore)
+	Error   string // messaggio di errore (valorizzato solo nel template di errore)
+}
+
+// mailTpl / errorMailTpl sono i template compilati in memoria all'avvio.
+// Non sono protetti da mutex perché vengono scritti una sola volta in
+// loadMailTemplates(), chiamata da main() prima di ListenAndServe, e letti
+// solo dopo — nessuna scrittura concorrente possibile.
+var (
+	mailTpl      *template.Template
+	errorMailTpl *template.Template
+)
+
+// loadMailTemplates carica mail.html ed errormail.html dalla cartella indicata
+// (di default "mailtemplates", configurabile con MAIL_TEMPLATE_PATH). Va
+// chiamata una sola volta all'avvio: se manca uno dei due file il server non
+// deve partire, così un errore di deploy è visibile subito e non al primo invio.
+func loadMailTemplates(dir string) error {
+	mailPath := filepath.Join(dir, "mail.html")
+	errorPath := filepath.Join(dir, "errormail.html")
+
+	mt, err := template.ParseFiles(mailPath)
+	if err != nil {
+		return fmt.Errorf("parsing %s: %w", mailPath, err)
+	}
+	et, err := template.ParseFiles(errorPath)
+	if err != nil {
+		return fmt.Errorf("parsing %s: %w", errorPath, err)
+	}
+
+	mailTpl = mt
+	errorMailTpl = et
+	return nil
+}
+
+// renderMail esegue il template indicato con i dati forniti e restituisce
+// l'HTML risultante come stringa, pronta per essere passata a sendEmail.
+func renderMail(tpl *template.Template, data MailData) (string, error) {
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func sendEmail(cfg Config, toAddr, subject, body, attachName string, attachData []byte) error {
 	if cfg.SMTPUser == "" || cfg.SMTPPass == "" {
 		return fmt.Errorf("SMTP non configurato")
@@ -1601,7 +1710,7 @@ func sendEmail(cfg Config, toAddr, subject, body, attachName string, attachData 
 	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	msg.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n\r\n", boundary))
 	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
+	msg.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
 	msg.WriteString(body + "\r\n\r\n")
 	if attachData != nil {
 		msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
@@ -1919,8 +2028,16 @@ func handleGenera(cfg Config, db *sql.DB) http.HandlerFunc {
 						UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 					})
 				}
-				_ = sendEmail(cfg, req.Email, "Errore generazione canzoniere",
-					fmt.Sprintf("Errore:\n\n%v", err), "", nil)
+				errBody, tplErr := renderMail(errorMailTpl, MailData{
+					JobID: jobID,
+					Email: req.Email,
+					Error: err.Error(),
+				})
+				if tplErr != nil {
+					log.Printf("ERROR rendering errormail.html [%s]: %v", jobID, tplErr)
+					errBody = fmt.Sprintf("Errore:\n\n%v", err) // fallback minimo se il template non è disponibile
+				}
+				_ = sendEmail(cfg, req.Email, "Errore generazione canzoniere", errBody, "", nil)
 				return
 			}
 			defer os.RemoveAll(result.WorkDir)
@@ -1928,9 +2045,18 @@ func handleGenera(cfg Config, db *sql.DB) http.HandlerFunc {
 			if titolo == "" {
 				titolo = "Canzoniere"
 			}
-			body := fmt.Sprintf("Ciao!\n\nIl canzoniere \"%s\" è pronto.\n"+
-				"In allegato trovi lo ZIP con i PDF e i sorgenti TeX.\n\n"+
-				"Buona musica!", titolo)
+			body, tplErr := renderMail(mailTpl, MailData{
+				JobID:   jobID,
+				Titolo:  titolo,
+				Email:   req.Email,
+				ZipName: result.ZipName,
+			})
+			if tplErr != nil {
+				log.Printf("ERROR rendering mail.html [%s]: %v", jobID, tplErr)
+				body = fmt.Sprintf("Ciao!\n\nIl canzoniere \"%s\" è pronto.\n"+
+					"In allegato trovi lo ZIP con i PDF e i sorgenti TeX.\n\n"+
+					"Buona musica!", titolo) // fallback minimo se il template non è disponibile
+			}
 			if err := sendEmail(cfg, req.Email,
 				fmt.Sprintf("Il tuo canzoniere: %s", titolo),
 				body, result.ZipName, result.ZipData); err != nil {
@@ -2152,6 +2278,7 @@ func newRouter(cfg Config, holder *dbHolder) http.Handler {
 	mux.HandleFunc("/famiglie", func(w http.ResponseWriter, r *http.Request) { handleGetFamiglie(db())(w, r) })
 	mux.HandleFunc("/momenti", func(w http.ResponseWriter, r *http.Request) { handleGetMomenti(db())(w, r) })
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) { handleSearch(cfg, db())(w, r) })
+	mux.HandleFunc("/songs", func(w http.ResponseWriter, r *http.Request) { handleAllSongs(cfg, db())(w, r) })
 	mux.HandleFunc("/songs/autore/", func(w http.ResponseWriter, r *http.Request) { handleSongsByAutore(cfg, db())(w, r) })
 	mux.HandleFunc("/songs/famiglia/", func(w http.ResponseWriter, r *http.Request) { handleSongsByFamiglia(cfg, db())(w, r) })
 	mux.HandleFunc("/songs/momento/", func(w http.ResponseWriter, r *http.Request) { handleSongsByMomento(cfg, db())(w, r) })
@@ -2392,6 +2519,10 @@ func main() {
 
 	if _, err := os.Stat(cfg.TemplatePath); os.IsNotExist(err) {
 		log.Fatalf("template non trovata: %s", cfg.TemplatePath)
+	}
+
+	if err := loadMailTemplates(cfg.MailTemplatePath); err != nil {
+		log.Fatalf("mail templates: %v", err)
 	}
 
 	holder := &dbHolder{}

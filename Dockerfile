@@ -1,4 +1,4 @@
-FROM ghcr.io/concimatteo/canzoniere-base:1.5
+FROM ghcr.io/concimatteo/canzoniere-latex-2026:latest
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -6,6 +6,7 @@ COPY vendor/ ./vendor/
 
 COPY main.go .
 COPY template/ ./template/
+COPY mailtemplates/ ./mailtemplates/
 
 RUN go build -mod=vendor -ldflags="-s -w" -o canzoniere-api .
 COPY songs.db .

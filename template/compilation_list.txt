@@ -1,0 +1,5 @@
+pdflatex filename.tex
+xindy -M texindy -C utf8 -L italian -M xindytematic tematico.idx
+xindy -M texindy -C utf8 -L italian -M xindystyle autori.idx
+xindy -M texindy -C utf8 -L italian -M xindystyle alfabetico.idx
+pdflatex filename.tex

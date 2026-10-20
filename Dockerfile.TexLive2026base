@@ -1,0 +1,40 @@
+# Usa un'immagine Debian snella come base
+FROM debian:bookworm-slim
+
+# Evita interazioni durante l'installazione dei pacchetti
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Installa le dipendenze minime per far girare TeX Live (Perl e curl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    perl \
+    wget \
+    ghostscript \
+    xz-utils \
+    xindy \
+    && rm -rf /var/lib/apt/lists/*
+
+# Scarica e installa l'ultima versione di TinyTeX (basata su TeX Live 2026)
+# Viene installata in /root/.TinyTeX
+RUN curl -sL "https://yihui.org/tinytex/install-bin-unix.sh" | sh
+
+# Aggiunge i binari di LaTeX al PATH di sistema
+ENV PATH="/root/.TinyTeX/bin/x86_64-linux:${PATH}"
+
+# Verifica l'installazione e aggiorna il gestore dei pacchetti tlmgr
+RUN pdflatex --version && \
+    tlmgr option repository ctan && \
+    tlmgr update --self
+
+# (Opzionale) Installa alcuni pacchetti base comunemente usati.
+# Se vuoi l'assoluto minimo, puoi commentare questa riga.
+RUN tlmgr install xstring ccicons imakeidx xpatch titlesec collection-fontsrecommended babel-italian libertine
+
+RUN curl -L https://go.dev/dl/go1.22.3.linux-amd64.tar.gz | tar -C /usr/local -xz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+#RUN fc-cache -fv
+
+WORKDIR /app

@@ -14,7 +14,7 @@
 %%  This work has the LPPL maintenance status "author-maintained".
 %% 
 \NeedsTeXFormat{LaTeX2e}[2005/12/01]
-\ProvidesClass{canzoniereonline}[2023/06/26 v1.0 Una classe per la creazione di canzonieri on line con texlive 2022 e successive]
+\ProvidesClass{canzoniereonline}[2026/06/10 v2.0 Una classe per la creazione di canzonieri on line con texlive 2026 e successive]
 \RequirePackage{xkeyval}
 \newif\iflibertine
 \newif\ifcanzsingole
@@ -77,6 +77,9 @@
 \RequirePackage{etoolbox,xstring}
 \RequirePackage{ccicons}
 \RequirePackage{imakeidx} 
+\RequirePackage{xpatch}
+\patchcmd{\@wrindex}{\thepage}{\thesongnum}{}{}
+
 \usepackage{titlesec}% cambio la formattazione dei titolo dei capitoli (mi serve per l'indice tematico)
 %%tolto ifxetex
 	\iftitleindex
@@ -126,10 +129,10 @@
 	\setlength{\headheight}{0pt}
 	\fancyhf{}
 	\renewcommand{\headrulewidth}{0pt}
-	%\fancyfoot[RE]{\setlength{\unitlength}{1mm} \begin{picture}(0,0)
-	%\put(-5,-10){\includegraphics[width=16mm]{logo-co}}\end{picture}}
-	%\fancyfoot[LO]{\setlength{\unitlength}{1mm} \begin{picture}(0,0)
-	%\put(-5,-10){\includegraphics[width=16mm]{logo-co}}\end{picture}}
+	\fancyfoot[RE]{\setlength{\unitlength}{1mm} \begin{picture}(0,0)
+	\put(-5,-10){\includegraphics[width=16mm]{logo-co}}\end{picture}}
+	\fancyfoot[LO]{\setlength{\unitlength}{1mm} \begin{picture}(0,0)
+	\put(-5,-10){\includegraphics[width=16mm]{logo-co}}\end{picture}}
 	\fancyfoot[RO]{\sffamily\small\thepage\ di \pageref{LastPage}}
 	\fancyfoot[LE]{\sffamily\small\thepage\ di \pageref{LastPage}}  
 	\fancyfoot[C]{\footnotesize\sffamily I testi delle canzoni sono proprietà dei rispettivi autori.\\ La Legge n. 159 del 22 maggio 1993 ne consente l'uso solo per attività didattica, di studio e di ricerca. \\Gli autori potranno richiederne la rimozione in qualsiasi momento scrivendo a canzoniereonline@gmail.com.}
@@ -272,7 +275,7 @@
 
 %modifico il comando per i titoli secondari, in modo da generare l'indice
 \renewcommand\indextitleentry[1]{%%%tolto ifxetex
-	\iftitleindex\index[alfabetico]{#1|indexanchor{\thesongnum}}
+	\iftitleindex\index[alfabetico]{#1}
 	\else
 	\fi
 }
@@ -371,7 +374,7 @@
 %
 \hypertarget{canto-\thesongnum}{}% and I put an anchor in my song.
 \iftitleindex\StrSubstitute{\songtitle}{!}{"!}[\indexsongtitle]%%%modifica tolto ifxetex
-		\index[alfabetico]{\indexsongtitle|indexanchor{\thesongnum}}
+		\index[alfabetico]{\indexsongtitle}
 \else\fi
        \nexttitle%
        %\foreachtitle{(\songtitle)\par}%
@@ -381,11 +384,11 @@
 \DeclareListParser*{\authsep}{,}
 \newcommand{\authindex}[1]{%
 \authsep{\authsingleindex}{#1}}
-\newcommand\authsingleindex[1]{\index[autori]{#1|indexanchor{\thesongnum}}}
+\newcommand\authsingleindex[1]{\index[autori]{#1}}
 
 \ExplSyntaxOn
 \seq_clear_new:N \l_co_hyperlinks_seq
-\NewDocumentCommand{\singleindexanchor}{m}
+\NewDocumentCommand{\singleindexanchor}{m} %non mi ricordo perché avessi creato questo comando, dal momento che non trovo nessuna lista di ancoraggi nei vari file indici. Forse li faceva makeindex? ma ora usiamo solo xindy
 	{
 	\seq_clear_new:N \l_co_indexanchors_seq
 	\seq_set_split:Nnn \l_co_indexanchors_seq {;} {#1}
@@ -397,10 +400,8 @@
 	\seq_use:Nnnn \l_co_hyperlinks_seq {,~}{,~}{,~}
 	}
 \ExplSyntaxOff
-
-
-	\newcommand{\indexanchor}[1]{\singleindexanchor{#1}}%%%tolto ifxetex
-
+%\newcommand{\indexanchor}[1]{\singleindexanchor{#1}}%%%tolto ifxetex | old version
+\newcommand{\indexanchor}[1]{\hyperlink{canto-#1}{#1}}
 
 %indice tematico
 %Affinché si possa creare un indice tematico serve che dopo \beginsong si inserisca il comando \momenti{}
@@ -470,7 +471,7 @@
 \newcommand*{\momentindex}[1]{%
   \getposition{#1}% al posto del nome del momento metto un numero
   \StrSubstitute{\songtitle}{!}{"!}[\indexsongtitle]
-  \edef\doindexentry{\noexpand\index[tematico]{\momentnumber @#1!{\expandonce\indexsongtitle}|indexanchor{\thesongnum}}}
+  \edef\doindexentry{\noexpand\index[tematico]{\momentnumber @#1!{\expandonce\indexsongtitle}}}
 {\doindexentry}
 }
 
