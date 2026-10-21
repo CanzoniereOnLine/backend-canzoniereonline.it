@@ -1,15 +1,18 @@
-FROM golang:1.22-bookworm AS build
-WORKDIR /src
+FROM ghcr.io/concimatteo/canzoniere-latex-2026:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CGO_ENABLED=1
+
+WORKDIR /app
+
 COPY go.mod go.sum ./
 COPY vendor/ ./vendor/
 COPY main.go .
-RUN CGO_ENABLED=1 go build -mod=vendor -ldflags="-s -w" -o /canzoniere-api .
-
-FROM ghcr.io/concimatteo/canzoniere-latex-2026:latest
-WORKDIR /app
-COPY --from=build /canzoniere-api ./canzoniere-api
 COPY template/ ./template/
 COPY mailtemplates/ ./mailtemplates/
+RUN go build -mod=vendor -ldflags="-s -w" -o canzoniere-api .
 COPY songs.db .
 RUN luaotfload-tool --update --force
 ENV TEMPLATE_PATH=/app/template
