@@ -1,0 +1,29 @@
+# ==========================================
+# macOS / OSX Standard Gitignore
+# ==========================================
+
+# File di sistema generali di macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icone e file di configurazione delle cartelle
+Icon?
+._*
+
+# File di sistema per i volumi di rete e rimovibili
+# (Evita il tracking se lavori su chiavette USB o cartelle condivise)
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# File specifici di Finder e iCloud
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
